@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Mantis — Entrega Final</title>
+    <style>
+        :root{
+            --bg:#000;
+            --neon:#39ff14;
+            --muted:#0b2b16;
+            --text:#bfffd7;
+            --bubble:#06120b;
+        }
+        html,body{height:100%;margin:0;background:var(--bg);font-family:"Courier New",monospace;color:var(--neon);display:flex;align-items:center;justify-content:center}
+        /* AJUSTE: Aumento el ancho máximo de la ventana para mejor lectura */
+        .container{width:90%;max-width:900px;height:92vh;border:2px solid var(--neon);border-radius:10px;padding:12px;box-sizing:border-box;display:flex;flex-direction:column;background:transparent}
+        .header{display:flex;align-items:center;gap:12px;padding-bottom:6px}
+        .title{font-size:20px;font-weight:700}
+        .subtitle{font-size:12px;color:#8fffbf}
+        .chat{flex:1;background:transparent;border-radius:6px;display:flex;flex-direction:column;overflow:hidden;padding:6px}
+        .chat-window{flex:1;overflow:auto;padding:8px 12px;white-space:pre-wrap;word-wrap:break-word}
+        /* AJUSTE: La burbuja del bot ahora usa más espacio para que el texto sea más largo */
+        .msg{background:var(--bubble);padding:10px 14px;border-radius:8px;margin:8px 0;max-width:95%;line-height:1.45;color:var(--text); box-sizing: border-box;}
+        .msg.bot{align-self:flex-start;border-left:4px solid var(--neon)}
+        .msg.user{align-self:flex-end;border-right:4px solid var(--neon);color:var(--neon);background:rgba(0,0,0,0.2); max-width: 60%;} /* El mensaje del usuario es más pequeño */
+        .composer{display:flex;gap:10px;padding-top:8px;border-top:1px solid rgba(57,255,20,0.06);align-items:center}
+        .composer input{flex:1;background:transparent;border:none;color:var(--neon);padding:10px;font-size:15px;outline:none}
+        .send-btn{background:transparent;border:1px solid var(--neon);color:var(--neon);padding:8px 12px;border-radius:6px;cursor:pointer}
+        .thinking{font-style:italic;opacity:0.85;color:var(--neon)}
+        /* popup */
+        .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.95);display:flex;align-items:center;justify-content:center;z-index:60}
+        .modal{width:420px;max-width:92%;background:transparent;text-align:center;padding:14px}
+        .modal h1{margin:0 0 8px 0;color:var(--neon);font-size:28px}
+        .modal p{margin:0 0 12px 0;color:#9fffbf}
+        .name-input{width:80%;height:38px;border:1px solid var(--neon);background:transparent;color:var(--neon);padding:6px 10px;font-size:16px;border-radius:6px;text-align:center; box-sizing: border-box;}
+        .enter-btn{margin-top:12px;border:1px solid var(--neon);background:transparent;color:var(--neon);padding:8px 14px;border-radius:6px;cursor:pointer}
+        .enter-btn:hover{background:var(--neon);color:#000}
+        footer{font-size:12px;color:#8fffbf;text-align:center;margin-top:8px}
+        @media(max-width:480px){.modal{width:320px}.name-input{width:90%}}
+    </style>
+</head>
+<body>
+    <div class="container" aria-label="Mantis chat">
+        <div class="header">
+            <div style="width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,#39ff85,#00ff6a);display:flex;align-items:center;justify-content:center">
+                <div style="width:20px;height:20px;clip-path:polygon(50% 0,0 100%,100% 100%);background:#001;opacity:0.08"></div>
+            </div>
+            <div>
+                <div class="title">Mantis</div>
+                <div class="subtitle">Asistente — Situación por regiones (demo)</div>
+            </div>
+        </div>
+
+        <div class="chat">
+            <div id="chatWindow" class="chat-window" role="log" aria-live="polite"></div>
+
+            <div class="composer">
+                <input id="userInput" type="text" placeholder="Escribe tu mensaje aquí... (ej.: '1', 'caribe', 'Meta', 'denunciar')" autocomplete="off" />
+                <button id="sendBtn" class="send-btn">Enviar</button>
+            </div>
+        </div>
+
+        <footer>Local demo — guarda el archivo y ábrelo en tu navegador para presentar.</footer>
+    </div>
+
+    <div id="overlay" class="overlay" role="dialog" aria-modal="true">
+        <div class="modal" role="document">
+            <h1>Bienvenido a Mantis</h1>
+            <p>Por favor, ingresa tu nombre para comenzar:</p>
+            <input id="nameInput" class="name-input" type="text" placeholder="Tu nombre..." />
+            <div><button id="enterBtn" class="enter-btn">Entrar</button></div>
+        </div>
+    </div>
+
+<script>
+/* ===================== DATOS ===================== */
+const zonas_colombia = {
+    "1": { name: "Caribe", items: {
+        "1":["Atlántico","En el área metropolitana se reporta reducción en asaltos y delitos de oportunidad, atribuida a controles urbanos y presencia institucional constante. Los reportes de violencia sexual presentan una disminución, gracias a campañas escolares y comunitarias recientes. Las actuaciones policiales han sido percibidas como efectivas, con pocos casos de cuestionamiento ciudadano. Los disturbios registrados corresponden a eventos puntuales sin estructura violenta."],
+        "2":["Bolívar","Cartagena evidencia disminución en asaltos y alteraciones de orden público. La intervención de la fuerza pública ha sido percibida como preventiva, el panorama general sugiere estabilidad urbana."],
+        "3":["Cesar","En Valledupar y municipios cercanos se reportan disminuciones en asaltos. Las intervenciones policiales han sido valoradas positivamente, aunque algunos sectores mencionan controles severos en áreas específicas. Disturbios menores ocurrieron durante eventos culturales, sin escalamiento."],
+        "4":["Córdoba","Córdoba registra descenso en asaltos urbanos y riñas. La fuerza pública desarrolla operaciones en áreas costeras y ganaderas, generando algunos choques aislados sin daño civil. Los disturbios urbanos son mínimos."],
+        "5":["La Guajira","Crímenes sexuales en tendencia descendente. La fuerza pública ha intervenido en protestas y puntos fronterizos, con opiniones divididas sobre su actuación."],
+        "6":["Magdalena","Santa Marta mantiene reducción leve en asaltos y riñas. No se confirmaron masacres. Intervenciones policiales se han centrado en zonas turísticas, con percepción social favorable. Disturbios urbanos reducidos a eventos puntuales."],
+        "7":["Sucre","Se registra baja actividad violenta en Sincelejo y municipios principales. Descenso en asaltos y ausencia de masacres. La Fuerza Pública mantiene presencia y controles."],
+        "8":["San Andrés y Providencia","El departamento mantiene muy baja actividad delictiva. Asaltos esporádicos con tendencia a la baja. Sin registros de intentos de homicidio, masacres ni secuestros. No se presentan disturbios."]
+    }},
+    "2": { name: "Pacífica", items: {
+        "1":["Chocó","No se documentan masacres urbanas. La fuerza pública ha reforzado patrullajes fluviales, sin indicios de uso excesivo. Los disturbios son prácticamente nulos, con movilidad social condicionada por riesgo en territorios aislados."],
+        "2":["Valle del Cauca","Cali experimenta control relativo con reducción en asaltos. No se registran masacres urbanas masivas. Disturbios menores durante concentraciones sociales sin escalamiento."],
+        "3":["Cauca","Se detectan patrones de desplazamiento forzado y amenazas comunitarias. En centros urbanos, los asaltos se mantienen estables, aunque redes reportan extorsión y presencia visible de actores armados encubiertos. El ambiente es tenso."],
+        "4":["Nariño","Pasto presenta estabilidad con reducción en asaltos. No se registran masacres urbanas. La intervención estatal genera choques esporádicos en áreas rurales. Los disturbios urbanos fueron aislados y sin escalamiento."]
+    }},
+    "3": { name: "Orinoca", items: {
+        "1":["Arauca","El departamento muestra que los asaltos mantienen una tendencia estable, no se observan masacres. Los casos de violencia sexual han disminuido con respecto a periodos previos. Intervenciones de la fuerza pública han generado episodios aislados de fricción, sin afectación a la población civil. La comunidad percibe un ambiente controlado, mientras se refuerzan operativos militares en corredores estratégicos fronterizos."],
+        "2":["Casanare","El departamento mantiene un comportamiento estable con baja incidencia en homicidios y ausencia de masacres. Los asaltos urbanos muestran reducción. La fuerza pública conserva presencia visible y aceptación ciudadana, aunque se reportan retenes frecuentes en zonas productivas. No se registran disturbios relevantes."],
+        "3":["Meta","Reducción sostenida en reportes de asaltos en Villavicencio, con percepción social positiva. La fuerza pública mantiene la presión en corredores hacia la frontera. Disturbios urbanos mínimos."],
+        "4":["Vichada","Vichada registra estabilidad con asaltos mínimos. No se presentan masacres ni secuestros. Crímenes sexuales en descenso. Fuerza pública mantiene patrullajes rurales y controles fluviales efectivos. Disturbios prácticamente inexistentes."]
+    }},
+    "4": { name: "Amazonia", items: {
+        "1":["Amazonas","Se observa estabilidad en los centros poblados, pocos casos de delitos. En comunidades rurales y ribereñas persiste preocupación por presencia irregular y tránsito fluvial sospechoso. La acción estatal continúa siendo preventiva y de supervisión territorial, sin reportes de confrontaciones significativas ni uso excesivo de la fuerza."],
+        "2":["Caqueta","Florencia registra disminución en delitos callejeros. La fuerza pública ha intensificado operaciones en corredores selváticos, generando algunos enfrentamientos aislados. No se observan disturbios urbanos significativos. La población urbana mantiene percepción de control."],
+        "3":["Guainia","Guainía mantiene niveles bajos de violencia, con escasos reportes de asaltos y casos aislados de agresiones personales. No hay registros de masacres ni secuestros. Los crímenes sexuales mostraron disminución gracias a acciones comunitarias y seguimiento institucional. No se identifican disturbios relevantes durante el periodo. La percepción social es de tranquilidad."],
+        "4":["Guaviare","Las zonas urbanas mantienen un nivel estable de asaltos. Las intervenciones de la fuerza pública han sido constantes, con enfrentamientos ocasionales en monte y sin impacto civil. Ausencia de disturbios urbanos relevantes."],
+        "5":["Putumayo","Los asaltos urbanos permanecen estables. La fuerza pública ejecuta patrullajes intensivos y operaciones selectivas."],
+        "6":["Vaupes","Se mantiene muy baja incidencia violenta. Casi inexistencia de asaltos y sin reportes de masacres o secuestros. Casos de violencia sexual disminuyen gracias a trabajo comunitario. No hay disturbios documentados."]
+    }},
+    "5": { name: "Andina", items: {
+        "1":["Cundinamarca","Municipios cercanos a Bogotá muestran reducción en asaltos y disturbios, reflejando mejoras en vigilancia coordinada. No se registran masacres ni secuestros. Las intervenciones policiales son percibidas como efectivas. En zonas periféricas y rurales persisten tensiones comunitarias menores sin escalamiento violento."],
+        "2":["Antioquia","En los principales centros urbanos se evidencia un descenso en reportes de asaltos. En redes se identifican comentarios sobre intervenciones policiales que han derivado en choques puntuales, generando percepción social dividida entre respaldo a operativos y cuestionamientos sobre riesgos colaterales."],
+        "3":["Boyaca","Boyacá mantiene un entorno de seguridad favorable, con reportes mínimos sobre homicidios y disturbios. En áreas rurales, las menciones a conflictos violentos son ocasionales y relacionadas principalmente con disputas interpersonales y extorsión informal. Las acciones de la fuerza pública han sido bien recibidas, con percepción general positiva y sin referencias frecuentes a intervenciones excesivas."],
+        "4":["Caldas","En Manizales y municipios cercanos se registra reducción en asaltos y riñas. Las intervenciones de la fuerza pública han sido preventivas, con pocos episodios de confrontación directa. Disturbios menores en entornos universitarios se disolvieron sin escalamiento violento. La comunidad mantiene percepción de control institucional."],
+        "5":["Huila","Los intentos de homicidio se mantienen escasos y sin estructura organizada. No se registran masacres ni secuestros. La violencia sexual muestra descenso impulsado por programas institucionales. Las intervenciones policiales se perciben como de bajo impacto operativo y controladas. Los disturbios fueron aislados y rápidamente contenidos."],
+        "6":["Nariño","Pasto presenta estabilidad con reducción en asaltos. No se registran masacres urbanas. La intervención estatal genera choques esporádicos en áreas rurales. Los disturbios urbanos fueron aislados y sin escalamiento."],
+        "7":["Norte de Santander","Los asaltos urbanos se mantienen estables en Cúcuta. La fuerza pública aumenta controles y genera reacciones puntuales en zonas limítrofes. Disturbios comunitarios menores vinculados a presiones migratorias."],
+        "8":["Quindio","Quindío mantiene condiciones favorables de seguridad. Reducción en asaltos en sectores turísticos y comerciales. Intentos de homicidio esporádicos y sin estructura criminal identificada. Fuerza pública activa con aceptación social mayoritaria."],
+        "9":["Risaralda","Reducción progresiva en reportes de asaltos en Pereira. Crímenes sexuales en disminución. Intervenciones policiales bien evaluadas. Disturbios en eventos masivos resueltos rápidamente."],
+        "10":["Santader","Bucaramanga y su área metropolitana observaron disminución en asaltos y hechos violentos urbanos. No se reportan masacres ni secuestros. La fuerza pública opera de manera preventiva, con percepción comunitaria favorable."],
+        "11":["Tolima","Ibagué muestra disminución en asaltos y riñas. Casos de violencia sexual en reducción debido a campañas institucionales. La intervención estatal es consistente y valorada."]
+    }},
+    "6": { name: "Insular", items: {
+        "1":["San Andrés y Providencia","El departamento mantiene muy baja actividad delictiva. Asaltos esporádicos con tendencia a la baja. Sin registros de intentos de homicidio, masacres ni secuestros. No se presentan disturbios."]
+    }}
+};
+
+
+const chatWindow = document.getElementById('chatWindow');
+const userInput = document.getElementById('userInput');
+const sendBtn = document.getElementById('sendBtn');
+const overlay = document.getElementById('overlay');
+const nameInput = document.getElementById('nameInput');
+const enterBtn = document.getElementById('enterBtn');
+
+let userName = '';
+
+let state = 'menu'; 
+let currentRegionKey = null;
+
+
+function appendMessage(text, who='bot'){
+    const d = document.createElement('div');
+    d.className = 'msg ' + (who==='bot' ? 'bot' : 'user');
+    d.textContent = text;
+    chatWindow.appendChild(d);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+/* thinking indicator: created and removed */
+function showThinking(){
+    const t = document.createElement('div');
+    t.className = 'msg bot thinking';
+    t.textContent = 'Mantis está pensando...';
+    chatWindow.appendChild(t);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+    return t;
+}
+function removeThinking(node){
+    if(node && node.parentNode) node.parentNode.removeChild(node);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+
+async function typeReply(fullText){
+    const bubble = document.createElement('div');
+    bubble.className = 'msg bot';
+    chatWindow.appendChild(bubble);
+    let i=0;
+    while(i < fullText.length){
+        bubble.textContent += fullText[i];
+        i++;
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+        const delay = Math.floor(Math.random()*(52-38))+38;
+        await sleep(delay);
+    }
+}
+
+function norm(text){ return text.normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase(); }
+
+
+function detectIntent(text){
+    const t = norm(text);
+
+    if(/\b(abandonar|salir|adios|adios)\b/.test(t)) return {type:'exit'};
+    if(/\b(menu|opciones|opcion)\b/.test(t)) return {type:'menu'};
+    if(/\b(denunci|testimon|jep|como denunciar|como dar testimonio|2)\b/.test(t)) return {type:'denunciar'};
+    if(t === '1') return {type:'consultar_regiones'};
+
+
+
+    for(const k in zonas_colombia){
+        if(t.includes(norm(zonas_colombia[k].name))) return {type:'region', key:k};
+    }
+    
+  
+    if(currentRegionKey === null){
+        for(const k in zonas_colombia){
+            const items = zonas_colombia[k].items;
+            for(const depKey in items){
+                const depName = items[depKey][0];
+                if(t.includes(norm(depName))) return {type:'department', region:k, depKey};
+            }
+        }
+    }
+    return {type:'unknown'};
+}
+
+
+async function respondTo(userText){
+    const thinkingNode = showThinking();
+    await sleep(3000);
+    removeThinking(thinkingNode);
+
+    const intent = detectIntent(userText);
+    const t = norm(userText); 
+
+    if(intent.type === 'exit'){
+        await typeReply(`Mantis: Saliendo del sistema. ¡Hasta pronto, ${userName || 'usuario'}!`);
+        state='menu';
+        currentRegionKey = null;
+        return;
+    }
+
+    if(intent.type === 'menu'){
+        const menuMsg = "Mantis: Si quiere ingresar a consultar la situación de cada departamento escriba 1.\nSi quiere saber cómo dar su testimonio y denunciar los delitos violentos en el país escriba 2.\nSi desea salir de Mantis escriba abandonar.";
+        await typeReply(menuMsg);
+        state='menu';
+        currentRegionKey = null;
+        return;
+    }
+    
+
+    if(intent.type === 'consultar_regiones' || (state === 'menu' && t === '1')){
+        let regionsText = "Mantis: Regiones disponibles: Caribe, Pacífica, Orinoca, Amazonia, Andina, Insular.\n\nPor favor, **escribe el nombre** de la región que deseas consultar.";
+        await typeReply(regionsText);
+        state='region_entry'; 
+        currentRegionKey = null;
+        return;
+    }
+
+    if(intent.type === 'denunciar'){
+        const d = "Mantis: La JEP (Jurisdicción Especial para la Paz) es un componente creado por el Gobierno Nacional para dar a conocer los delitos que el conflicto armado ha generado en el país y permitir que las víctimas den testimonio. Puedes ver su página oficial para denunciar y obtener información: https://www.jep.gov.co/Paginas/Inicio.aspx\nDesde Mantis esperamos que esta información sea de ayuda.";
+        await typeReply(d);
+        state='denuncia';
+        return;
+    }
+
+
+    if(state === 'region_entry' && intent.type === 'unknown'){
+
+        for(const k in zonas_colombia){
+            if(t.includes(norm(zonas_colombia[k].name))){ 
+
+                const reg = zonas_colombia[k];
+                
+
+                let text = `Mantis: Escogiste la región **${reg.name}**.\nDepartamentos disponibles:\n`;
+
+                text += Object.values(reg.items).map(item => item[0]).join(', ');
+                text += `\n\nEscribe el **nombre del departamento** para ver su reporte.`;
+
+                await typeReply(text);
+                state='departamento_selection'; 
+                currentRegionKey = k;
+                return;
+            }
+        }
+
+        await typeReply("Mantis: Por favor, escribe el **nombre** de una de las regiones listadas (Caribe, Pacífica, Orinoca, Amazonia, Andina, Insular).");
+        return;
+    }
+    
+
+    if(intent.type === 'region'){
+        const reg = zonas_colombia[intent.key];
+        
+
+        let text = `Mantis: Escogiste la región **${reg.name}**.\nDepartamentos disponibles:\n`;
+
+        text += Object.values(reg.items).map(item => item[0]).join(', ');
+        text += `\n\nEscribe el **nombre del departamento** para ver su reporte.`;
+
+        await typeReply(text);
+        state='departamento_selection'; 
+        currentRegionKey = intent.key;
+        return;
+    }
+
+    if(intent.type === 'department'){
+        const reg = zonas_colombia[intent.region];
+        const dep = reg.items[intent.depKey];
+        await typeReply(`Mantis — **${dep[0]}**:\n${dep[1]}`);
+        state='departamento_info';
+        return;
+    }
+
+
+    if(state === 'departamento_selection' && currentRegionKey){
+        const reg = zonas_colombia[currentRegionKey];
+        
+ 
+        for(const depKey in reg.items){
+            const depName = norm(reg.items[depKey][0]);
+
+            if(t === depKey || depName === t || depName.includes(t)){
+                const dep = reg.items[depKey];
+                await typeReply(`Mantis — **${dep[0]}**:\n${dep[1]}`);
+                state='departamento_info';
+                return;
+            }
+        }
+        await typeReply(`Mantis: El departamento '${userText}' no se encontró en la región seleccionada. Por favor, ingrese el **nombre** de un departamento listado (ej: 'Cauca', 'Antioquia').`);
+        return;
+    }
+    
+
+    await typeReply("Mantis: No reconozco exactamente lo que pides. Escribe 'menu' para ver opciones, el nombre de una región (Caribe, Pacífica, Orinoca, Amazonia, Andina, Insular) o el departamento que te interese (ej. 'Meta', 'Córdoba'). También puedes escribir 'denunciar'.");
+}
+
+
+sendBtn.addEventListener('click', async ()=>{
+    const val = userInput.value.trim();
+    if(!val) return;
+    appendMessage(val,'user');
+    userInput.value='';
+    await respondTo(val);
+});
+userInput.addEventListener('keydown', async (e)=>{
+    if(e.key === 'Enter' && !e.shiftKey){
+        e.preventDefault();
+        sendBtn.click();
+    }
+});
+
+
+enterBtn.addEventListener('click', startChat);
+nameInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') startChat(); });
+
+async function startChat(){
+    userName = nameInput.value.trim() || 'Usuario';
+    overlay.style.display = 'none';
+
+    const t1 = showThinking(); await sleep(900); removeThinking(t1);
+    await typeReply(`Mantis: Bienvenido a Mantis, proyecto creado con el fin de difundir la situación violenta en el país. ¡Hola ${userName}!`);
+    const t2 = showThinking(); await sleep(900); removeThinking(t2);
+    await typeReply("Mantis: Si quiere ingresar a consultar la situación de cada departamento escriba 1. Si quiere saber cómo dar su testimonio y denunciar los delitos violentos en el país escriba 2. Si desea salir de Mantis escriba abandonar.");
+    state = 'menu';
+    userInput.focus();
+}
+
+</script>
+</body>
+</html>
